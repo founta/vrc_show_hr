@@ -11,7 +11,7 @@ from pathlib import Path
 if __name__ == "__main__":
     output_fname = Path("dist") / "main.exe"
     desired_fname = Path("dist") / "vrc_show_hr.exe"
-    subprocess.run(["pyinstaller", "main.py", "-F", "--collect-all=sanic", "--collect-all=tracerite"])
+    subprocess.run(["pyinstaller", "main.py", "-F", "--collect-all=sanic", "--collect-data=tracerite"])
     
     with open(desired_fname, "wb") as f_out:
         with open(output_fname, "rb") as f_in:
