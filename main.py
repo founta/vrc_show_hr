@@ -5,7 +5,7 @@ Created on Sun Feb 25 10:07:22 2024
 @author: founta
 """
 
-import json, time, sanic
+import json, time, sanic, os
 from sanic import response
 from sanic.log import logger
 
@@ -63,17 +63,18 @@ def read_hr_target():
         time.sleep(1)
     url = "wss://dev.pulsoid.net/api/v1/data/real_time?access_token=%s" % \
         (access_token)
-    logger.info("Connecting to pulsoid...")
-    with connect(url) as ws:
-        logger.info("connected to pulsoid!")
-        while not stop:
-            msg = ws.recv()
-            try:
-                msg_json = json.loads(msg)
-            except json.JSONDecodeError:
-                logger.error("could not parse pulsoid message!")
-            hr = msg_json["data"]["heart_rate"]
-            logger.info("Read a heartrate of %d from pulsoid!" % (hr))
+    if access_token is not None and not stop:
+        logger.info("Connecting to pulsoid...")
+        with connect(url) as ws:
+            logger.info("connected to pulsoid!")
+            while not stop:
+                msg = ws.recv()
+                try:
+                    msg_json = json.loads(msg)
+                except json.JSONDecodeError:
+                    logger.error("could not parse pulsoid message!")
+                hr = msg_json["data"]["heart_rate"]
+                logger.info("Read a heartrate of %d from pulsoid!" % (hr))
 
 def check_args(request, expected_key):
     args = None
@@ -203,7 +204,13 @@ def if_present(key, conf):
         return conf[key]
 
 if __name__ == "__main__":
-    config_fname = Path(__file__).parent / "hr_save.json"
+    #if getattr(sys, 'frozen', False):
+    #    exe_path = Path(sys._MEIPASS)
+    #else:
+    #    exe_path = Path(__file__)
+    exe_path = Path(os.getcwd())
+    config_fname = exe_path / "hr_save.json"
+    print("trying to read config file at %s" % (str(config_fname)))
     if config_fname.exists():    
         with open(config_fname, "r") as f:
             config = json.load(f)
