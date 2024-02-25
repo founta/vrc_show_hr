@@ -28,6 +28,17 @@ osc_udp = udp_client.SimpleUDPClient("127.0.0.1", 9000)
 
 web_app = sanic.Sanic("vrchat_heartrate_sender")
 
+exe_path = Path(os.getcwd())
+config_fname = exe_path / "hr_save.json"
+
+def flush_config():
+    global config_fname, access_token, update_interval, hr_prefix
+    with open(config_fname, "w") as f:
+        if access_token is None:
+            access_token = ""
+        f.write(json.dumps({"access_token": access_token, "update_interval": update_interval, "hr_prefix": hr_prefix}, indent=2))
+        print("wrote config file to %s" % (str(config_fname)))
+
 def send_text_to_vrc(text):
     global osc_udp
     osc_udp.send_message("/chatbox/input", [text, True, False]) #text, send now, notification
@@ -97,6 +108,8 @@ async def update_text(request):
     ok2, lifetime = check_args(request, "text_lifetime")
     ok3, interval = check_args(request, "update_interval")
     ok4, prefix = check_args(request, "hr_prefix")
+    
+    do_config_update = False
 
     if ok2:
         text_lifetime = float(lifetime)
@@ -105,12 +118,16 @@ async def update_text(request):
         logger.warn("update text could not update text lifetime")
 
     if ok3:
+        if (update_interval != float(interval)):
+            do_config_update = True
         update_interval = float(interval)
         user_updated = True
     else:
         logger.warn("update text could not update interval")
 
     if ok3:
+        if hr_prefix != prefix:
+            do_config_update = True
         hr_prefix = prefix
         user_updated = True
     else:
@@ -127,6 +144,8 @@ async def update_text(request):
         logger.warn("update text could not update text")
     
     logger.info("Updated text and such")
+    if do_config_update:
+        flush_config()
     return response.empty(status=200)
 
 @web_app.route("/api/update_token", methods=["POST"])
@@ -138,6 +157,7 @@ async def update_token(request):
     else:
         logger.error("update token could not validate args")
     logger.info("Updated pulsoid access token! to %s" % (access_token))
+    flush_config()
     return response.empty(status=200)
 
 @web_app.route("/", methods=["GET"])
@@ -204,21 +224,20 @@ def if_present(key, conf):
         return conf[key]
 
 if __name__ == "__main__":
-    #if getattr(sys, 'frozen', False):
-    #    exe_path = Path(sys._MEIPASS)
-    #else:
-    #    exe_path = Path(__file__)
-    exe_path = Path(os.getcwd())
-    config_fname = exe_path / "hr_save.json"
     print("trying to read config file at %s" % (str(config_fname)))
-    if config_fname.exists():    
-        with open(config_fname, "r") as f:
-            config = json.load(f)
-            access_token = if_present("access_token", config)
-            if access_token == "":
-                access_token = None
-            update_interval = if_present("update_interval", config)
-            hr_prefix = if_present("hr_prefix", config)
+    if config_fname.exists():
+        try:
+            with open(config_fname, "r") as f:
+                config = json.load(f)
+                access_token = if_present("access_token", config)
+                if access_token == "":
+                    access_token = None
+                update_interval = if_present("update_interval", config)
+                hr_prefix = if_present("hr_prefix", config)
+        except:
+            print("Unable to load configuration file, proceeding with defaults")
+    else:
+        print("configuration file not found! proceeding with defaults")
 
     hr_thd = Thread(target=read_hr_target)
     hr_thd.start()
@@ -234,8 +253,4 @@ if __name__ == "__main__":
     vrc_update_thread.join()
     web_app.stop()
     
-    with open(config_fname, "w") as f:
-        if access_token is None:
-            access_token = ""
-        f.write(json.dumps({"access_token": access_token, "update_interval": update_interval, "hr_prefix": hr_prefix}, indent=2))
-        print("wrote config file to %s" % (str(config_fname)))
+    flush_config()
