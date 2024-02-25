@@ -1,4 +1,4 @@
-#VRC heartrate sender
+# VRC heartrate sender
 This project retrieves your heart rate from Pulsoid and sends it to VR chat's text box. It is controlled by a web UI and also allows sending other text via the web UI
 
 1. Download the executable from the releases page
