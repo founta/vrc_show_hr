@@ -2,3 +2,5 @@ build/
 dist/
 *.spec
 test.py
+*.exe
+*.json
