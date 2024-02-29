@@ -17,7 +17,7 @@ from pythonosc import udp_client
 
 access_token = None
 hr = None
-hr_prefix="hr: "
+hr_prefix="♡  "
 text_extra=""
 text_lifetime=0
 text_expire_time=None
@@ -48,7 +48,7 @@ def vrchat_textbox_updater():
     while not stop:
         text = ""
         if hr is not None:
-            text += "%s%03d" % (hr_prefix, hr)
+            text += "%s%d" % (hr_prefix, hr)
         if len(text_extra):
             text += "\n" + text_extra
         if len(text):
