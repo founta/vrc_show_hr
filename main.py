@@ -18,6 +18,7 @@ from pythonosc import udp_client
 access_token = None
 hr = None
 hr_prefix="♡  "
+zero_pad = False
 text_extra=""
 text_lifetime=0
 text_expire_time=None
@@ -32,11 +33,11 @@ exe_path = Path(os.getcwd())
 config_fname = exe_path / "hr_save.json"
 
 def flush_config():
-    global config_fname, access_token, update_interval, hr_prefix
+    global config_fname, access_token, update_interval, hr_prefix, zero_pad
     with open(config_fname, "w") as f:
         if access_token is None:
             access_token = ""
-        f.write(json.dumps({"access_token": access_token, "update_interval": update_interval, "hr_prefix": hr_prefix}, indent=2))
+        f.write(json.dumps({"access_token": access_token, "update_interval": update_interval, "hr_prefix": hr_prefix, "zero_pad": zero_pad}, indent=2))
         print("wrote config file to %s" % (str(config_fname)))
 
 def send_text_to_vrc(text):
@@ -44,11 +45,11 @@ def send_text_to_vrc(text):
     osc_udp.send_message("/chatbox/input", [text, True, False]) #text, send now, notification
 
 def vrchat_textbox_updater():
-    global stop,hr,update_interval,user_updated,text_extra,text_expire_time
+    global stop,hr,update_interval,user_updated,text_extra,text_expire_time,zero_pad
     while not stop:
         text = ""
         if hr is not None:
-            text += "%s%d" % (hr_prefix, hr)
+            text += "%s%s" % (hr_prefix, ("%03d" % (hr)) if zero_pad else ("%d" % (hr)))
         if len(text_extra):
             text += "\n" + text_extra
         if len(text):
@@ -103,13 +104,20 @@ def check_args(request, expected_key):
 @web_app.route("/api/update_text", methods=["POST"])
 async def update_text(request):
     global user_updated, text_extra, text_lifetime, text_expire_time
-    global update_interval, hr_prefix
+    global update_interval, hr_prefix, zero_pad
     ok1, text = check_args(request, "text_extra")
     ok2, lifetime = check_args(request, "text_lifetime")
     ok3, interval = check_args(request, "update_interval")
     ok4, prefix = check_args(request, "hr_prefix")
+    ok5, web_zero_pad = check_args(request, "zero_pad")
     
     do_config_update = False
+
+    if ok5:
+        if (zero_pad != bool(web_zero_pad)):
+            do_config_update = True
+        zero_pad = bool(web_zero_pad)
+        user_updated = True
 
     if ok2:
         text_lifetime = float(lifetime)
@@ -187,12 +195,13 @@ async def splash(request):
           var hr_prefix = document.getElementById("hr_prefix")
           var update_interval = document.getElementById("update_interval")
           var text_lifetime = document.getElementById("text_lifetime")
+          var zero_pad = document.getElementById("zero_pad")
 
           var http = new XMLHttpRequest();
           http.open("POST", window.location.protocol + "//" + window.location.host + "/api/update_text", false);
           http.setRequestHeader("Content-type", "application/json")
           
-          var send_payload = {"text_extra":text_extra.value, "hr_prefix":hr_prefix.value, "update_interval":update_interval.value, "text_lifetime":text_lifetime.value}
+          var send_payload = {"text_extra":text_extra.value, "hr_prefix":hr_prefix.value, "update_interval":update_interval.value, "text_lifetime":text_lifetime.value, "zero_pad":zero_pad.checked}
           http.send(JSON.stringify(send_payload));
         }
     </script>
@@ -200,11 +209,13 @@ async def splash(request):
     <label for="access_token">Pulsoid access token</label>
     <input type="password" id="access_token" name="Access token" value="%s"/><br>
     <button type="button" id="update_access_token" onclick="update_token()">Update pulsoid access token</button><br><br>
-    
 
     <label for="hr_prefix">Heart rate prefix text</label>
     <input type="text" id="hr_prefix" name="Heart rate prefix text" value="%s"/><br>
-    
+
+    <label for="zero_pad">Pad the heart rate with a zero if less than 3 digits?</label>
+    <input type="checkbox" id="zero_pad" name="Zero pad" %s/><br>
+
     <label for="update_interval">VRC text update interval, in seconds</label>
     <input type="number" id="update_interval" name="Heart rate update interval (seconds)" value="%f"/><br><br>
     
@@ -213,15 +224,17 @@ async def splash(request):
     
     <label for="text_lifetime">How long to display the extra text for (in seconds). 0 for infinite</label>
     <input type="number" id="text_lifetime" name="text_lifetime" value="0"/><br>
-    <button type="button" id="update" onclick="update_text()">Update text</button>
+    <button type="button" id="update" onclick="update_text()">Update settings</button>
     
-""" % (access_token if access_token is not None else "", hr_prefix, update_interval)
+""" % (access_token if access_token is not None else "", hr_prefix, "checked" if zero_pad else "", update_interval)
     logger.info("Served splash screen...")
     return response.html(html)
 
-def if_present(key, conf):
+def if_present(key, conf, default):
     if key in conf.keys():
         return conf[key]
+    else:
+        return default
 
 if __name__ == "__main__":
     print("trying to read config file at %s" % (str(config_fname)))
@@ -229,11 +242,12 @@ if __name__ == "__main__":
         try:
             with open(config_fname, "r") as f:
                 config = json.load(f)
-                access_token = if_present("access_token", config)
+                access_token = if_present("access_token", config, "")
                 if access_token == "":
                     access_token = None
-                update_interval = if_present("update_interval", config)
-                hr_prefix = if_present("hr_prefix", config)
+                update_interval = if_present("update_interval", config, update_interval)
+                hr_prefix = if_present("hr_prefix", config, hr_prefix)
+                zero_pad = if_present("zero_pad", config, zero_pad)
         except:
             print("Unable to load configuration file, proceeding with defaults")
     else:
